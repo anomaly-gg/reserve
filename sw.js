@@ -1,29 +1,9 @@
-/* Keeps phones on the newest version. VERSION + FILES are stamped by ../_dev/deploy_web.py; don't edit those two lines by hand.
-   Caches are named "reserve-v-…": /workout and /pantry share this origin and each only deletes its own prefix. */
-const VERSION = "reserve-v-0303d5f15bd1";
-const FILES = ["./", "css/app.css", "icons/apple-touch-icon.png", "icons/favicon-64.png", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/owner-apple-touch-icon.png", "icons/owner-favicon-64.png", "icons/owner-icon-192.png", "icons/owner-icon-512.png", "icons/owner-maskable-512.png", "icons/wordmark.png", "index.html", "js/api.js", "js/app.js", "js/owner.js", "js/pwa.js", "js/usercheck.js", "manifest.webmanifest", "owner.html", "owner.webmanifest"];
-
-self.addEventListener("install", e => {
-  // cache: "reload" skips the browser's HTTP cache (Pages sends max-age=600) so a new version never mixes in old files
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" })))));
-});
-
-self.addEventListener("activate", e => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k.startsWith("reserve-v-") && k !== VERSION).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener("message", e => { if (e.data === "skipWaiting") self.skipWaiting(); });
-
-self.addEventListener("fetch", e => {
-  const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== location.origin) return;   // the Worker API always goes to the network
-  e.respondWith(
-    caches.open(VERSION)
-      .then(c => c.match(e.request, { ignoreSearch: true }))
-      .then(hit => hit || fetch(e.request))
-  );
-});
+// Kill switch for the old /reserve service worker (the app moved to /goa, 2026-11-10). A phone that still runs the old
+// worker fetches this file on its next update check, installs it, and it removes itself + the old caches, then reloads
+// the open page, which now comes from the network = the redirect to /goa.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  for (const k of await caches.keys()) if (k.startsWith('reserve-v-')) await caches.delete(k);
+  await self.registration.unregister();
+  for (const c of await self.clients.matchAll({ type: 'window' })) c.navigate(c.url).catch(() => {});
+})()));
