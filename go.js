@@ -1,19 +1,27 @@
-// /reserve moved to /goa (NETPIX Goa app, 2026-11-10). Keeps old links working: the FB post, old Discord
-// "Approve / decline" links (owner.html?r=ID) and the owner setup link (#k=...). Same origin, so the phone's saved
-// registration + owner key carry over. Also removes the old /reserve service worker + its caches.
+// The NETPIX Goa app moved to its own address (security audit 2026-11-10): this old one (anomaly-gg.github.io/goa and
+// /reserve) shares browser storage with other pages, so it now only REDIRECTS. Keeps old links working: the FB post, old
+// Discord "Approve / decline" links (owner.html?r=ID), installed home-screen icons.
+// The owner key (owner page only) is handed over ONCE in the #fragment, which browsers never send to a server - the same
+// #k= setup link the owner page already uses - and then this page deletes every app copy kept at the old address.
+// Customer phones re-register on the new address (a login handed over in a link could be abused; see SECURITY_AUDIT.md).
+// Identical in both repos (reserve, goa gh-pages): edit cafe-reserve/redirect/go.js, then run build.py there.
 (function () {
-  var page = /owner\.html$/.test(location.pathname) ? 'owner.html' : '';
-  var hash = location.hash || (page ? '' : '#overnight');     // old customer link = the overnight request
-  var target = '/goa/' + page + location.search + hash;
+  var NEW = 'https://netpix-goa.xpropics.workers.dev/';
+  var owner = /owner\.html$/.test(location.pathname);
+  var key = null;
+  try { key = localStorage.getItem('cr_owner_key'); } catch (e) { }
+  var hash = owner ? (key ? '#k=' + encodeURIComponent(key) : '') : (location.hash || '#overnight');
+  var target = NEW + (owner ? 'owner.html' : '') + location.search + hash;
+  try { localStorage.removeItem('cr_owner_key'); localStorage.removeItem('cr_token'); } catch (e) { }
   var go = function () { location.replace(target); };
   try {
     if (!('serviceWorker' in navigator)) return go();
     var t = setTimeout(go, 1500);
     navigator.serviceWorker.getRegistrations().then(function (regs) {
-      return Promise.all(regs.filter(function (r) { return /\/reserve\/$/.test(r.scope); }).map(function (r) { return r.unregister(); }));
+      return Promise.all(regs.filter(function (r) { return /\/(reserve|goa)\/$/.test(r.scope); }).map(function (r) { return r.unregister(); }));
     }).then(function () {
       return window.caches ? caches.keys().then(function (ks) {
-        return Promise.all(ks.filter(function (k) { return k.indexOf('reserve-v-') === 0; }).map(function (k) { return caches.delete(k); }));
+        return Promise.all(ks.filter(function (k) { return k.indexOf('reserve-v-') === 0 || k.indexOf('goa-v-') === 0; }).map(function (k) { return caches.delete(k); }));
       }) : null;
     }).then(function () { clearTimeout(t); go(); }, function () { clearTimeout(t); go(); });
   } catch (e) { go(); }
